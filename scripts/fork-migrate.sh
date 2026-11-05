@@ -25,19 +25,23 @@ if [[ -n "${official_pid}" ]] && kill -0 "${official_pid}" 2>/dev/null; then
   exit 1
 fi
 
-scripts/fork-serve.sh stop
-[[ -d "${target_dir}" ]] && mv "${target_dir}" "${backup_dir}" && echo "Previous fork data: ${backup_dir}"
-mkdir -p "${target_dir}/secrets"
-chmod 700 "${target_dir}" "${target_dir}/secrets"
+# Assemble the copy beside the target so a failure leaves the fork's data untouched.
+staging_dir="${fork_home}/userdata.migrating"
+rm -rf "${staging_dir}"
+mkdir -p "${staging_dir}/secrets"
+chmod 700 "${staging_dir}" "${staging_dir}/secrets"
 
-# Online backup: consistent even while the source is in use, and reads it only.
-sqlite3 -readonly "${source_dir}/statev2.sqlite" ".backup '${target_dir}/statev2.sqlite'"
+# immutable=1 reads without creating -shm/-wal or taking locks, which a cleanly closed WAL
+# database needs for any other read-only open; safe because the official server is stopped.
+sqlite3 "file:${source_dir}/statev2.sqlite?immutable=1" ".backup '${staging_dir}/statev2.sqlite'"
 # Paired clients start over: the fork has its own address, and these include T3 Connect clients.
-sqlite3 "${target_dir}/statev2.sqlite" "DELETE FROM auth_sessions; DELETE FROM auth_pairing_links;"
+sqlite3 "${staging_dir}/statev2.sqlite" "DELETE FROM auth_sessions; DELETE FROM auth_pairing_links;"
 
 for entry in attachments themes settings.json client-settings.json keybindings.json \
   keybindings-migrations compacted-at environment-id; do
-  [[ -e "${source_dir}/${entry}" ]] && cp -R "${source_dir}/${entry}" "${target_dir}/"
+  if [[ -e "${source_dir}/${entry}" ]]; then
+    cp -R "${source_dir}/${entry}" "${staging_dir}/"
+  fi
 done
 
 # Server keys and provider credentials only. Not cloud-* (T3 Connect) or dpop-proof-* (replay markers).
@@ -45,11 +49,18 @@ for secret in "${source_dir}"/secrets/*.bin; do
   case "$(basename "${secret}")" in
     server-signing-key.bin | asset-access-signing-key.bin | mcp-oauth-signing-key.bin | \
       secret-request-salt.bin | provider-auth-*.bin)
-      cp "${secret}" "${target_dir}/secrets/"
+      cp "${secret}" "${staging_dir}/secrets/"
       ;;
   esac
 done
-chmod 600 "${target_dir}"/secrets/*
+chmod 600 "${staging_dir}"/secrets/*
+
+scripts/fork-serve.sh stop
+if [[ -d "${target_dir}" ]]; then
+  mv "${target_dir}" "${backup_dir}"
+  echo "Previous fork data: ${backup_dir}"
+fi
+mv "${staging_dir}" "${target_dir}"
 
 scripts/fork-serve.sh start
 echo "Migrated. Pair your browser again: scripts/fork-serve.sh pair"
