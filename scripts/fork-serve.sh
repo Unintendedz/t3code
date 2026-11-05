@@ -53,10 +53,24 @@ unload() {
   while loaded; do sleep 0.2; done
 }
 
+# pair finds the server through its runtime file, which appears a moment after launch.
+wait_ready() {
+  local runtime="${t3_home}/userdata/server-runtime.json"
+  for _ in $(seq 1 150); do
+    local pid
+    pid="$(node -p "try { require('${runtime}').pid ?? '' } catch { '' }")"
+    [[ -n "${pid}" ]] && kill -0 "${pid}" 2>/dev/null && return 0
+    sleep 0.2
+  done
+  echo "${label} did not become ready within 30s. See: scripts/fork-serve.sh log" >&2
+  exit 1
+}
+
 case "${1:-status}" in
   start)
     write_plist
     loaded || launchctl bootstrap "${domain}" "${plist}"
+    wait_ready
     echo "Started ${label} on 127.0.0.1:${port}. Log: ${log_file}"
     ;;
   stop)
@@ -68,6 +82,7 @@ case "${1:-status}" in
     unload
     write_plist
     launchctl bootstrap "${domain}" "${plist}"
+    wait_ready
     echo "Restarted ${label}."
     ;;
   status) launchctl print "${domain}/${label}" 2>/dev/null | sed -n '/^\tstate =/p;/^\tpid =/p' || echo "Not loaded." ;;
