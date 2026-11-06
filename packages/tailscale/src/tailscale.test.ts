@@ -337,8 +337,20 @@ describe("tailscale", () => {
       return { stdout: prefsJson };
     });
 
+    const socketLayer = Layer.merge(
+      layerMockSpawner((command, args) => {
+        assert.equal(command, "tailscale");
+        assert.deepEqual(args, ["--socket=/home/me/.tailscaled/tailscaled.sock", "debug", "prefs"]);
+        return { stdout: prefsJson };
+      }),
+      Layer.succeed(HostProcess.Environment, {
+        T3CODE_TAILSCALE_SOCKET: "/home/me/.tailscaled/tailscaled.sock",
+      }),
+    );
+
     return Effect.gen(function* () {
       assert.isTrue(yield* readTailscaleSshEnabled.pipe(Effect.provide(layer)));
+      assert.isTrue(yield* readTailscaleSshEnabled.pipe(Effect.provide(socketLayer)));
       assert.isFalse(yield* parseTailscaleSshEnabled('{"RunSSH":false,"WantRunning":true}'));
       assert.isFalse(yield* parseTailscaleSshEnabled('{"RunSSH":true,"WantRunning":false}'));
       assert.isFalse(yield* parseTailscaleSshEnabled("{}"));

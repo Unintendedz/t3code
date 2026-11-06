@@ -12,9 +12,14 @@ port="${T3CODE_PORT:-3780}"
 log_file="${t3_home}/fork-server.log"
 plist="$HOME/Library/LaunchAgents/${label}.plist"
 domain="gui/$(id -u)"
+# A tailscaled on a non-default socket (tailscale --socket=...). Baked into the service at start.
+tailscale_socket="${T3CODE_TAILSCALE_SOCKET:-}"
 mkdir -p "${t3_home}" "$(dirname "${plist}")"
 
 write_plist() {
+  local socket_env=""
+  [[ -n "${tailscale_socket}" ]] &&
+    socket_env="<key>T3CODE_TAILSCALE_SOCKET</key><string>${tailscale_socket}</string>"
   cat >"${plist}" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -33,6 +38,7 @@ write_plist() {
   <dict>
     <key>T3CODE_HOME</key><string>${t3_home}</string>
     <key>T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD</key><string>false</string>
+    ${socket_env}
   </dict>
   <key>WorkingDirectory</key><string>${HOME}</string>
   <key>RunAtLoad</key><true/>

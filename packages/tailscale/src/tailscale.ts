@@ -31,6 +31,16 @@ const TAILSCALE_PROBE_TIMEOUT = Duration.millis(2_500);
 const tailscaleCommandForPlatform = (platform: NodeJS.Platform): "tailscale" | "tailscale.exe" =>
   platform === "win32" ? "tailscale.exe" : "tailscale";
 
+/**
+ * The CLI to spawn for `args`. `T3CODE_TAILSCALE_SOCKET` reaches a tailscaled that listens on a
+ * non-default socket, the same as `tailscale --socket=<path>`.
+ */
+const tailscaleInvocation = Effect.fn("tailscale.invocation")(function* (args: readonly string[]) {
+  const executable = tailscaleCommandForPlatform(yield* HostProcess.Platform);
+  const socket = (yield* HostProcess.Environment).T3CODE_TAILSCALE_SOCKET?.trim();
+  return { executable, args: socket ? [`--socket=${socket}`, ...args] : [...args] };
+});
+
 const TailscaleCommandContext = {
   executable: Schema.Literals(["tailscale", "tailscale.exe"]),
   subcommand: Schema.Literals(["status", "serve", "debug"]),
@@ -246,14 +256,14 @@ const readTailscaleOutput = Effect.fn("tailscale.readTailscaleOutput")(function*
   args: readonly string[],
 ) {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const hostPlatform = yield* HostProcess.Platform;
-  const executable = tailscaleCommandForPlatform(hostPlatform);
+  const invocation = yield* tailscaleInvocation(args);
+  const executable = invocation.executable;
   const commandContext = {
     executable,
     subcommand,
     argumentCount: args.length,
   };
-  const command = ChildProcess.make(executable, [...args], {
+  const command = ChildProcess.make(executable, invocation.args, {
     forceKillAfter: TAILSCALE_KILL_GRACE,
   });
   return yield* Effect.gen(function* () {
@@ -400,8 +410,8 @@ const runTailscaleCommand = Effect.fn("tailscale.runTailscaleCommand")(function*
   timeoutInput: Duration.Input,
 ): Effect.fn.Return<void, TailscaleCommandError, ChildProcessSpawner.ChildProcessSpawner> {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const hostPlatform = yield* HostProcess.Platform;
-  const executable = tailscaleCommandForPlatform(hostPlatform);
+  const invocation = yield* tailscaleInvocation(args);
+  const executable = invocation.executable;
   const commandContext = {
     executable,
     subcommand: "serve" as const,
@@ -410,7 +420,9 @@ const runTailscaleCommand = Effect.fn("tailscale.runTailscaleCommand")(function*
   const timeout = Duration.fromInputUnsafe(timeoutInput);
   return yield* Effect.gen(function* () {
     const child = yield* spawner
-      .spawn(ChildProcess.make(executable, args, { forceKillAfter: TAILSCALE_KILL_GRACE }))
+      .spawn(
+        ChildProcess.make(executable, invocation.args, { forceKillAfter: TAILSCALE_KILL_GRACE }),
+      )
       .pipe(
         Effect.mapError((cause) => new TailscaleCommandSpawnError({ ...commandContext, cause })),
         Effect.catchDefect((cause) =>
