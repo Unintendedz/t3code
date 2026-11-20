@@ -1,3 +1,61 @@
+> [!NOTE]
+> **Privacy Fork (`privacy` branch)** — Forked from [`pingdotgg/t3code`](https://github.com/pingdotgg/t3code). Below is a summary of what this branch changes and how to run it locally; the original upstream README follows.
+
+## What's Changed in This Fork (`privacy`)
+
+### Privacy & self-hosted defaults
+
+- **Telemetry & relay tracing off by default**: `T3CODE_TELEMETRY_ENABLED` now defaults to `false` (both PostHog product analytics and OpenTelemetry relay tracing stay disabled unless explicitly set to `true`).
+- **No default T3-hosted relay**: `.env.example` comments out `T3CODE_RELAY_URL=https://relay.t3.codes` by default.
+- **Mobile OTA updates off by default**: Expo OTA updates in `apps/mobile/app.config.ts` are disabled unless `T3CODE_MOBILE_UPDATES_ENABLED=1` is set at build time.
+- **Desktop auto-update disabled in launcher**: `scripts/fork-desktop.sh` launches Electron with `T3CODE_DISABLE_AUTO_UPDATE=true`.
+
+### Custom Tailscale socket support
+
+- `packages/tailscale` honors `T3CODE_TAILSCALE_SOCKET` (passed to `tailscale --socket=...`) so T3 Code works with a non-default `tailscaled` socket.
+- `scripts/fork-serve.sh` bakes `T3CODE_TAILSCALE_SOCKET` into the `launchd` service when set; `scripts/fork-serve.sh pair` and `scripts/fork-desktop.sh` also auto-detect `$HOME/.tailscaled/tailscaled.sock` when unset.
+
+### Fork management & macOS launch scripts
+
+All fork scripts isolate state in `~/.t3-private` (`T3CODE_HOME`) on port `3780` (`T3CODE_PORT`), separate from an official `~/.t3` install:
+
+- [`scripts/fork-serve.sh`](./scripts/fork-serve.sh) — Run the built server as a macOS `launchd` user agent (`--tailscale-serve`, auto-start on login, waits until ready on `start`/`restart`, disables `T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD`). Subcommands: `start | stop | restart | status | pair [--local] | log`.
+- [`scripts/fork-desktop.sh`](./scripts/fork-desktop.sh) — Build and launch the Electron desktop client in remote-only mode so it connects to the background server without contending for the database. Supports installing a `/Applications/T3 Code (Private).app` launcher. Subcommands: `start | foreground | build | install-app | uninstall-app | pair | log`.
+- [`scripts/fork-migrate.sh`](./scripts/fork-migrate.sh) — One-way copy of projects, threads, attachments, settings, themes, keybindings, and provider credentials from an official T3 Code install (`~/.t3`) into `~/.t3-private`, stripping T3 Connect / cloud keys, auth sessions, and telemetry IDs (with automatic backup of previous fork data).
+- [`scripts/fork-sync.sh`](./scripts/fork-sync.sh) — Rebase `privacy` onto upstream (`latest` release, `main`, or a specific tag), reinstall dependencies, run the telemetry privacy test, and rebuild.
+
+### Quick Start (macOS)
+
+```bash
+git clone https://github.com/Unintendedz/t3code.git
+cd t3code
+pnpm install
+./node_modules/.bin/vp run build:desktop
+
+# Start the background server (uses ~/.t3-private on port 3780)
+./scripts/fork-serve.sh start
+
+# Pair a browser (over Tailscale by default, or pass --local for localhost)
+./scripts/fork-serve.sh pair
+
+# Optional: launch the desktop app (or install /Applications/T3 Code (Private).app)
+./scripts/fork-desktop.sh start
+./scripts/fork-desktop.sh install-app
+
+# Optional: one-way migrate data from an existing official ~/.t3 install (quit official app first)
+./scripts/fork-migrate.sh
+```
+
+To keep up with upstream later:
+
+```bash
+git remote add upstream https://github.com/pingdotgg/t3code.git
+./scripts/fork-sync.sh        # latest upstream release (or pass `main` / `<tag>`)
+./scripts/fork-serve.sh restart
+```
+
+---
+
 <p align="center">
   <a href="https://t3.codes">
     <img src="./assets/prod/t3-black-web-icon-192x192.png" width="80" height="80" alt="T3 Code logo" />
