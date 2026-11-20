@@ -4,7 +4,7 @@
 # if it exits.
 #   scripts/fork-serve.sh start|stop|restart|status|pair|log
 set -euo pipefail
-cd "$(git rev-parse --show-toplevel)"
+cd "$(cd "$(dirname "$0")/.." && pwd)"
 
 label="dev.t3code.fork"
 t3_home="${T3CODE_HOME:-$HOME/.t3-private}"
@@ -95,12 +95,20 @@ case "${1:-status}" in
   pair)
     # One-time tokens expire; mint one right before pasting it.
     tailscale_flag=""
-    command -v tailscale >/dev/null && tailscale_flag="--tailscale"
-    node apps/server/dist/bin.mjs pair --base-dir "${t3_home}" --ttl 15m ${tailscale_flag}
+    if [[ "${2:-}" == "--local" ]]; then
+      tailscale_flag=""
+    elif command -v tailscale >/dev/null; then
+      tailscale_flag="--tailscale"
+    fi
+    if [[ -z "${tailscale_socket}" && -S "$HOME/.tailscaled/tailscaled.sock" ]]; then
+      tailscale_socket="$HOME/.tailscaled/tailscaled.sock"
+    fi
+    T3CODE_TAILSCALE_SOCKET="${tailscale_socket}" \
+      node apps/server/dist/bin.mjs pair --base-dir "${t3_home}" --ttl 15m ${tailscale_flag}
     ;;
   log) tail -n 60 "${log_file}" ;;
   *)
-    echo "Usage: $0 start|stop|restart|status|pair|log" >&2
+    echo "Usage: $0 start|stop|restart|status|pair [--local]|log" >&2
     exit 1
     ;;
 esac

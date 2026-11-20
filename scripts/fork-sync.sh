@@ -23,6 +23,7 @@ git rebase "${target}" privacy
 
 npx -y "$(node -p "require('./package.json').packageManager")" install
 (cd packages/shared && ../../node_modules/.bin/vp test run src/otelEnvironment.test.ts)
-node_modules/.bin/vp run --filter t3 build
+node_modules/.bin/vp run build:desktop
 
 echo "Synced to ${target}. Restart the server: scripts/fork-serve.sh restart"
+echo "If using the desktop client, quit and reopen it: scripts/fork-desktop.sh start"
