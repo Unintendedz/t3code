@@ -5,8 +5,9 @@
 
 ### Privacy & self-hosted defaults
 
-- **Telemetry & relay tracing off by default**: `T3CODE_TELEMETRY_ENABLED` now defaults to `false` (both PostHog product analytics and OpenTelemetry relay tracing stay disabled unless explicitly set to `true`).
-- **No default T3-hosted relay**: `.env.example` comments out `T3CODE_RELAY_URL=https://relay.t3.codes` by default.
+- **Telemetry & relay tracing off by default**: `T3CODE_TELEMETRY_ENABLED` defaults to `false`, the hardcoded `ingest.t3.codes` host and PostHog key defaults are cleared, and OpenTelemetry relay tracing stays disabled unless explicitly opted in.
+- **No cross-tool identity reading or client analytics IDs**: `Identify.ts` never reads `~/.codex/auth.json`, `~/.claude.json`, or `CLOUD_LINKED_USER_ID` for telemetry; disabled telemetry short-circuits before creating `anonymous-id` or starting flush timers; web/PWA/client connections never persist `t3code:analytics-device-id` or send `clientOwner`/`clientDevice` hashes.
+- **No default T3-hosted relay or Axiom endpoint**: `.env.example` comments out `T3CODE_RELAY_URL=https://relay.t3.codes`, mobile config clears the default `api.axiom.co` traces URL, and mobile crash reports are opt-in.
 - **Mobile OTA updates off by default**: Expo OTA updates in `apps/mobile/app.config.ts` are disabled unless `T3CODE_MOBILE_UPDATES_ENABLED=1` is set at build time.
 - **Desktop auto-update disabled in launcher**: `scripts/fork-desktop.sh` launches Electron with `T3CODE_DISABLE_AUTO_UPDATE=true`.
 

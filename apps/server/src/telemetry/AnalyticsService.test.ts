@@ -7,6 +7,7 @@ import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
@@ -502,5 +503,51 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("AnalyticsService
 
       assert.deepEqual(capturedPaths, []);
     }),
+  );
+
+  it.effect(
+    "defaults off without creating anonymous-id, and never falls back to T3 ingest when only T3CODE_TELEMETRY_ENABLED=true",
+    () =>
+      Effect.gen(function* () {
+        for (const env of [{}, { T3CODE_TELEMETRY_ENABLED: true }]) {
+          const requests: Array<string> = [];
+          const client = HttpClient.make((request) =>
+            Effect.sync(() => {
+              requests.push(request.url);
+              return HttpClientResponse.fromWeb(request, new Response(null, { status: 204 }));
+            }),
+          );
+          const layerServerConfig = ServerConfig.ServerConfig.layerTest(process.cwd(), {
+            prefix: "t3-telemetry-default-off-",
+          });
+          const layerRuntime = AnalyticsService.layer.pipe(
+            Layer.provideMerge(layerServerConfig),
+            Layer.provide(ConfigProvider.layer(ConfigProvider.fromUnknown(env))),
+            Layer.provide(
+              Layer.mergeAll(
+                Layer.succeed(HostProcess.Platform, "linux"),
+                Layer.succeed(HostProcess.Architecture, "arm64"),
+                Layer.succeed(HttpClient.HttpClient, client),
+                ManagedPolicy.layerTest(),
+              ),
+            ),
+          );
+
+          yield* Effect.gen(function* () {
+            const config = yield* ServerConfig.ServerConfig;
+            const fileSystem = yield* FileSystem.FileSystem;
+            const analytics = yield* AnalyticsService.AnalyticsService;
+            assert.isFalse(yield* analytics.record("test.default_off", { index: 1 }));
+            yield* analytics.recordOwners(
+              [{ source: "connect", ownerId: "a".repeat(64) }],
+              "server",
+            );
+            yield* analytics.flush;
+            assert.isFalse(yield* fileSystem.exists(config.anonymousIdPath));
+          }).pipe(Effect.provide(layerRuntime));
+
+          assert.deepEqual(requests, []);
+        }
+      }),
   );
 });

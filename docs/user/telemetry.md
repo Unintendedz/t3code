@@ -15,7 +15,7 @@ The server sends usage events to `ingest.t3.codes` under a hashed random install
 
 ## Relay connection diagnostics
 
-T3 Connect sends connection timings, request paths, environment/thread IDs, and error types (no addresses, logs, or stack frames) to Axiom. This fork turns product events and relay tracing off by default; to turn them on, set `T3CODE_TELEMETRY_ENABLED=true` in the environment before starting. Relay tracing still stops when `T3CODE_OTEL_SDK_DISABLED` or `OTEL_SDK_DISABLED` turns OpenTelemetry export off.
+T3 Connect sends connection timings, request paths, environment/thread IDs, and error types (no addresses, logs, or stack frames) to Axiom. This fork turns product events and relay tracing off by default, clears the default T3 ingest endpoint and key configuration, never reads `CLOUD_LINKED_USER_ID` for cross-install attribution, and never creates or sends client analytics device/owner identifiers. To turn product events on against your own endpoint, set `T3CODE_TELEMETRY_ENABLED=true`, `T3CODE_TELEMETRY_HOST`, and `T3CODE_TELEMETRY_KEY` in the environment before starting. Relay tracing still stops when `T3CODE_OTEL_SDK_DISABLED` or `OTEL_SDK_DISABLED` turns OpenTelemetry export off.
 
 ## Agent feedback
 
